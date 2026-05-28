@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import https from 'https';
 
 export interface FetchFundDataOptions {
   code: string;
@@ -45,12 +46,22 @@ export async function fetchFundNavHistory(options: FetchFundDataOptions): Promis
           ...(end_date && { edate: end_date }),
         });
 
+        // 创建独立的 agent 避免 Express 连接池问题
+        const agent = new https.Agent({
+          keepAlive: false,
+          maxSockets: 1,
+        });
+
         const response = await axios.get(`${EAST_MONEY_API}?${params.toString()}`, {
           timeout,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
           },
+          httpAgent: agent,
+          httpsAgent: agent,
         });
+
+        agent.destroy(); // 请求完成后销毁 agent
 
         const html = response.data as string;
         const $ = cheerio.load(html);
@@ -91,9 +102,12 @@ export async function fetchFundNavHistory(options: FetchFundDataOptions): Promis
           }
         });
 
-        // 检查是否还有下一页
-        const hasNextPage = html.includes('page') && !html.includes('page=' + page + '"') &&
-                            !html.includes('page=' + (page + 1) + '"');
+        // 解析分页信息
+        const pageMatch = html.match(/pages:(\d+)/);
+        const curMatch = html.match(/curpage:(\d+)/);
+        const totalPages = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+        const currentPage = curMatch ? parseInt(curMatch[1], 10) : 1;
+        const hasNextPage = currentPage < totalPages;
 
         if (!hasNextPage || allData.length === 0) {
           return {
