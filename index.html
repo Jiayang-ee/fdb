@@ -832,7 +832,7 @@
 
     // ── Mock API ─────────────────────────────────────────────────────────────
     async function mockBacktest({ fundCode, amount, frequency, startDate, endDate }) {
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 300));
 
       // Parse dates
       const start = new Date(startDate);
