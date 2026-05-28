@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>基金定投回测工具</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-base: #0d1117;
+      --bg-surface: #161b22;
+      --bg-elevated: #21262d;
+      --border: #30363d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent-gold: #f0b429;
+      --accent-gold-dim: #d69e2e;
+      --accent-teal: #2dd4bf;
+      --accent-teal-dim: #14b8a6;
+      --positive: #3fb950;
+      --negative: #f85149;
+      --chart-blue: #58a6ff;
+      --chart-purple: #a371f7;
+      --radius: 8px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Noise texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.4;
+    }
+
+    ::selection { background: var(--accent-gold); color: var(--bg-base); }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+    .serif { font-family: 'DM Serif Display', serif; }
+
+    /* ── Layout ─────────────────────────────────── */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    .header {
+      padding: 32px 0 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 32px;
+      animation: fadeSlideDown 0.5s ease-out;
+    }
+
+    @keyframes fadeSlideDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-dim) 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 0 20px rgba(240,180,41,0.25);
+    }
+
+    .header-icon svg { color: var(--bg-base); }
+
+    .header-text h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
+    }
+
+    .header-text p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Main Grid ──────────────────────────────── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 1023px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Sidebar / Form ──────────────────────────── */
+    .sidebar {
+      position: sticky;
+      top: 24px;
+      animation: fadeSlideRight 0.5s ease-out 0.1s both;
+    }
+
+    @keyframes fadeSlideRight {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    @media (max-width: 1023px) {
+      .sidebar { position: static; }
+    }
+
+    .form-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .form-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    /* Fund Select */
+    .fund-select-wrapper {
+      position: relative;
+    }
+
+    .fund-select-trigger {
+      width: 100%;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 40px 10px 12px;
+      color: var(--text-primary);
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      min-height: 44px;
+    }
+
+    .fund-select-trigger:hover { border-color: var(--text-muted); }
+    .fund-select-trigger:focus {
+      outline: none;
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 0 3px rgba(240,180,41,0.15);
+    }
+
+    .fund-select-trigger .fund-code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--accent-gold);
+      background: rgba(240,180,41,0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .fund-select-trigger .chevron {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      transition: transform 0.2s;
+      pointer-events: none;
+    }
+
+    .fund-select-trigger.open .chevron { transform: translateY(-50%) rotate(180deg); }
+
+    .fund-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      z-index: 100;
+      max-height: 280px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .fund-dropdown.open { display: block; }
+
+    .fund-option {
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-left: 3px solid transparent;
+      transition: background 0.12s, border-color 0.12s;
+    }
+
+    .fund-option:hover {
+      background: rgba(240,180,41,0.06);
+      border-left-color: var(--accent-gold);
+    }
+
+    .fund-option.selected {
+      background: rgba(240,180,41,0.1);
+      border-left-color: var(--accent-gold);
+    }
+
+    .fund-option .fund-name { font-size: 13px; color: var(--text-primary); }
+    .fund-option .fund-code-badge {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--accent-gold);
+    }
+
+    .fund-option .check-icon { color: var(--accent-gold); display: none; }
+    .fund-option.selected .check-icon { display: block; }
+
+    /* Number Input */
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-prefix {
+      position: absolute;
+      left: 12px;
+      color: var(--text-muted);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      pointer-events: none;
+    }
+
+    .form-input {
+      width: 100%;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px 10px 28px;
+      color: var(--text-primary);
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 14px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      -moz-appearance: textfield;
+    }
+
+    .form-input::-webkit-outer-spin-button,
+    .form-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 0 3px rgba(240,180,41,0.15);
+    }
+
+    .form-input.error { border-color: var(--negative); }
+    .form-input.error:focus { box-shadow: 0 0 0 3px rgba(248,81,73,0.15); }
+
+    .error-msg {
+      font-size: 11px;
+      color: var(--negative);
+      margin-top: 6px;
+      display: none;
+    }
+
+    .error-msg.visible { display: block; }
+
+    /* Radio Group */
+    .radio-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .radio-pill {
+      flex: 1;
+      min-width: 72px;
+    }
+
+    .radio-pill input[type="radio"] { display: none; }
+
+    .radio-pill label {
+      display: block;
+      text-align: center;
+      padding: 8px 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .radio-pill input[type="radio"]:checked + label {
+      background: var(--accent-gold);
+      border-color: var(--accent-gold);
+      color: var(--bg-base);
+      font-weight: 600;
+    }
+
+    .radio-pill label:hover { background: var(--bg-elevated); border-color: var(--text-muted); }
+    .radio-pill input[type="radio"]:checked + label:hover { background: var(--accent-gold-dim); border-color: var(--accent-gold-dim); }
+
+    /* Date Input */
+    .form-input.date-input { padding-left: 12px; }
+
+    .date-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* CTA Button */
+    .btn-primary {
+      width: 100%;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-dim) 100%);
+      border: none;
+      border-radius: var(--radius);
+      color: var(--bg-base);
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px rgba(240,180,41,0.2);
+      margin-top: 8px;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(240,180,41,0.35);
+    }
+
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-primary .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(13,17,23,0.3);
+      border-top-color: var(--bg-base);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Content Area ─────────────────────────────── */
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      animation: fadeSlideLeft 0.5s ease-out 0.2s both;
+    }
+
+    @keyframes fadeSlideLeft {
+      from { opacity: 0; transform: translateX(12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ── Metrics Panel ──────────────────────────── */
+    .metrics-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 640px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .metric-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+
+    .metric-card:hover {
+      border-color: var(--text-muted);
+      transform: translateY(-1px);
+    }
+
+    .metric-card .metric-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .metric-card .metric-value {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .metric-card .metric-value.positive { color: var(--positive); }
+    .metric-card .metric-value.negative { color: var(--negative); }
+    .metric-card .metric-value.accent-gold { color: var(--accent-gold); }
+    .metric-card .metric-value.accent-teal { color: var(--accent-teal); }
+
+    .metric-card .metric-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .metric-card .metric-sub span {
+      color: var(--text-secondary);
+    }
+
+    /* Skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--border) 50%, var(--bg-elevated) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 4px;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .skeleton-value {
+      height: 28px;
+      width: 70%;
+      margin-bottom: 8px;
+    }
+
+    .skeleton-label {
+      height: 12px;
+      width: 50%;
+    }
+
+    /* ── Chart Area ────────────────────────────── */
+    .chart-area {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      padding: 14px 16px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      position: relative;
+      transition: color 0.15s;
+    }
+
+    .tab-btn:hover { color: var(--text-secondary); }
+    .tab-btn.active { color: var(--accent-gold); }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent-gold);
+      border-radius: 2px 2px 0 0;
+    }
+
+    .chart-canvas-wrap {
+      padding: 20px;
+      position: relative;
+      min-height: 340px;
+    }
+
+    .chart-canvas-wrap canvas { width: 100% !important; }
+
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+
+    .empty-state svg { opacity: 0.3; }
+    .empty-state p { font-size: 14px; }
+
+    /* ── Error Banner ───────────────────────────── */
+    .error-banner {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--negative);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-primary);
+      animation: fadeSlideDown 0.3s ease-out;
+    }
+
+    .error-banner svg { color: var(--negative); flex-shrink: 0; }
+    .error-banner .error-text { flex: 1; font-size: 14px; }
+    .error-banner .error-retry {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 14px;
+      color: var(--text-primary);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .error-banner .error-retry:hover { border-color: var(--text-muted); }
+
+    /* ── Footer ─────────────────────────────────── */
+    .footer {
+      text-align: center;
+      padding: 32px 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+
+    /* ── Animations ─────────────────────────────── */
+    .fade-in {
+      animation: fadeIn 0.4s ease-out both;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    .stagger-1 { animation-delay: 0.06s; }
+    .stagger-2 { animation-delay: 0.12s; }
+    .stagger-3 { animation-delay: 0.18s; }
+    .stagger-4 { animation-delay: 0.24s; }
+    .stagger-5 { animation-delay: 0.30s; }
+    .stagger-6 { animation-delay: 0.36s; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-inner">
+        <div class="header-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        </div>
+        <div class="header-text">
+          <h1 class="serif">基金定投回测工具</h1>
+          <p>比较定投与一次性买入的历史表现</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <div class="main-grid">
+      <!-- Sidebar: Parameter Form -->
+      <aside class="sidebar">
+        <div class="form-card">
+          <div class="form-title">回测参数</div>
+
+          <!-- Fund Selector -->
+          <div class="form-group">
+            <label class="form-label">选择基金</label>
+            <div class="fund-select-wrapper">
+              <div class="fund-select-trigger" id="fundTrigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                <span class="fund-placeholder">选择基金…</span>
+                <svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </div>
+              <div class="fund-dropdown" id="fundDropdown" role="listbox"></div>
+            </div>
+          </div>
+
+          <!-- Amount -->
+          <div class="form-group">
+            <label class="form-label" for="amountInput">定投金额</label>
+            <div class="input-wrapper">
+              <span class="input-prefix">¥</span>
+              <input type="number" id="amountInput" class="form-input" placeholder="每次定投金额" min="100" max="10000000" step="100" />
+            </div>
+            <p class="error-msg" id="amountError">金额需在 100 ~ 10,000,000 之间</p>
+          </div>
+
+          <!-- Frequency -->
+          <div class="form-group">
+            <label class="form-label">定投频率</label>
+            <div class="radio-group" id="freqGroup">
+              <div class="radio-pill">
+                <input type="radio" id="freqWeekly" name="frequency" value="weekly" />
+                <label for="freqWeekly">每周</label>
+              </div>
+              <div class="radio-pill">
+                <input type="radio" id="freqBiweekly" name="frequency" value="biweekly" />
+                <label for="freqBiweekly">每两周</label>
+              </div>
+              <div class="radio-pill">
+                <input type="radio" id="freqMonthly" name="frequency" value="monthly" checked />
+                <label for="freqMonthly">每月</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dates -->
+          <div class="form-group">
+            <label class="form-label">日期范围</label>
+            <div class="date-row">
+              <div>
+                <input type="date" id="startDate" class="form-input date-input" />
+                <p class="error-msg" id="startDateError">请选择开始日期</p>
+              </div>
+              <div>
+                <input type="date" id="endDate" class="form-input date-input" />
+                <p class="error-msg" id="endDateError">请选择结束日期</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Submit -->
+          <button type="button" class="btn-primary" id="submitBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            发起回测
+          </button>
+        </div>
+      </aside>
+
+      <!-- Content Area -->
+      <main class="content-area">
+        <!-- Metrics Panel -->
+        <div class="metrics-panel" id="metricsPanel">
+          <div class="metrics-grid">
+            <div class="metric-card stagger-1" id="metricInvestment">
+              <div class="metric-label">累计投入</div>
+              <div class="metric-value mono" id="valInvestment">—</div>
+              <div class="metric-sub">定投总投入金额</div>
+            </div>
+            <div class="metric-card stagger-2" id="metricDcaAssets">
+              <div class="metric-label">期末资产（定投）</div>
+              <div class="metric-value mono accent-gold" id="valDcaAssets">—</div>
+              <div class="metric-sub">定投策略最终资产</div>
+            </div>
+            <div class="metric-card stagger-3" id="metricDcaReturn">
+              <div class="metric-label">总收益（定投）</div>
+              <div class="metric-value mono" id="valDcaReturn">—</div>
+              <div class="metric-sub">定投绝对收益金额</div>
+            </div>
+            <div class="metric-card stagger-4" id="metricDcaRate">
+              <div class="metric-label">定投收益率</div>
+              <div class="metric-value mono" id="valDcaRate">—</div>
+              <div class="metric-sub">内部收益率 (IRR)</div>
+            </div>
+            <div class="metric-card stagger-5" id="metricDcaDrawdown">
+              <div class="metric-label">最大回撤（定投）</div>
+              <div class="metric-value mono negative" id="valDcaDrawdown">—</div>
+              <div class="metric-sub">定投最大回撤</div>
+            </div>
+            <div class="metric-card stagger-6" id="metricLumpSum">
+              <div class="metric-label">一次性买入对比</div>
+              <div class="metric-value mono accent-teal" id="valLumpSum">—</div>
+              <div class="metric-sub">资产 <span id="valLumpAssets">—</span> · 收益率 <span id="valLumpRate">—</span> · 回撤 <span id="valLumpDrawdown">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error Banner (hidden by default) -->
+        <div class="error-banner" id="errorBanner" style="display:none">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span class="error-text" id="errorText">发生错误</span>
+          <button class="error-retry" id="retryBtn">重试</button>
+        </div>
+
+        <!-- Chart Area -->
+        <div class="chart-area">
+          <div class="tab-bar">
+            <button class="tab-btn active" data-tab="asset">资产曲线</button>
+            <button class="tab-btn" data-tab="nav">净值曲线</button>
+            <button class="tab-btn" data-tab="return">收益曲线</button>
+          </div>
+          <div class="chart-canvas-wrap">
+            <canvas id="mainChart"></canvas>
+            <div class="empty-state" id="emptyState">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+              <p>请先填写参数并发起回测</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      基金定投回测工具 · 仅供历史数据参考，不构成投资建议
+    </footer>
+  </div>
+
+  <script>
+    // ── Constants ─────────────────────────────────────────────────────────────
+    const FUNDS = [
+      { code: '110011', name: '易方达中小盘混合' },
+      { code: '005827', name: '易方达蓝筹精选混合' },
+      { code: '163406', name: '兴全合润混合' },
+      { code: '161725', name: '招商中证白酒指数A' },
+      { code: '003095', name: '中欧医疗健康混合A' },
+      { code: '110003', name: '易方达上证50指数A' },
+      { code: '000311', name: '景顺长城沪深300指数增强A' },
+      { code: '519674', name: '银河创新成长混合A' },
+      { code: '320007', name: '诺安成长混合' },
+      { code: '000248', name: '汇添富中证主要消费ETF联接A' },
+      { code: '012922', name: '易方达全球成长精选混合(QDII)C' },
+    ];
+
+    // ── State ───────────────────────────────────────────────────────────────
+    const state = {
+      selectedFund: null,
+      amount: null,
+      frequency: 'monthly',
+      startDate: '',
+      endDate: '',
+      loading: false,
+      error: null,
+      result: null,
+      activeTab: 'asset',
+    };
+
+    let chartInstance = null;
+
+    // ── Seeded PRNG for deterministic mock data ────────────────────────────
+    function mulberry32(seed) {
+      return function() {
+        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    // ── Mock API ─────────────────────────────────────────────────────────────
+    async function mockBacktest({ fundCode, amount, frequency, startDate, endDate }) {
+      await new Promise(r => setTimeout(r, 600));
+
+      // Parse dates
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const dayCount = Math.max(1, Math.floor((end - start) / 86400000));
+
+      // Seed from fund code for reproducibility
+      const seed = fundCode.split('').reduce((a, c) => a + c.charCodeAt(0), 0) +
+        Math.floor(dayCount / 30) * 1000;
+      const rng = mulberry32(seed);
+
+      // Generate NAV curve (approximate working days)
+      const navCurve = [];
+      const navStart = 1.5 + rng() * 2;
+      let nav = navStart;
+      const workDays = Math.min(500, Math.floor(dayCount * 5 / 7));
+      const navStep = (Math.pow(rng() * 0.5 + 0.5, 0.3) - 0.8) / workDays;
+
+      for (let i = 0; i < workDays; i++) {
+        nav = Math.max(0.3, nav + (rng() - 0.48) * navStep * nav);
+        const d = new Date(start.getTime() + (i * 7 * 86400000 / 5));
+        if (d > end) break;
+        navCurve.push({
+          date: d.toISOString().slice(0, 10),
+          nav: parseFloat(nav.toFixed(4)),
+        });
+      }
+
+      // Frequency settings
+      const freqMap = { weekly: 7, biweekly: 14, monthly: 30 };
+      const freqDays = freqMap[frequency] || 30;
+
+      // DCA simulation
+      let dcaShares = 0;
+      let dcaInvestment = 0;
+      const dcaDates = [];
+      const assetCurve = [];
+      const returnCurve = [];
+
+      for (let i = 0; i < navCurve.length; i++) {
+        const { date, nav: n } = navCurve[i];
+        // invest at the end of period
+        if (i % Math.max(1, Math.round(freqDays / 5)) === 0) {
+          dcaShares += amount / n;
+          dcaInvestment += amount;
+        }
+        const assets = dcaShares * n;
+        const ret = assets - dcaInvestment;
+        const retRate = dcaInvestment > 0 ? ret / dcaInvestment : 0;
+        dcaDates.push(date);
+        assetCurve.push({ date, dca: parseFloat(assets.toFixed(2)), lumpSum: 0 });
+        returnCurve.push({ date, return: parseFloat(ret.toFixed(2)), returnRate: parseFloat((retRate * 100).toFixed(2)) });
+      }
+
+      // Lump sum: invest total at midpoint
+      const midpoint = Math.floor(navCurve.length / 3);
+      const lumpNav = navCurve[midpoint]?.nav || navCurve[0].nav;
+      const lumpShares = dcaInvestment / lumpNav;
+      let lumpMaxDrawdown = 0;
+      let lumpPeak = 0;
+
+      for (let i = midpoint; i < navCurve.length; i++) {
+        const { date, nav: n } = navCurve[i];
+        const assets = lumpShares * n;
+        assetCurve[i].lumpSum = parseFloat(assets.toFixed(2));
+        if (assets > lumpPeak) lumpPeak = assets;
+        const dd = (lumpPeak - assets) / lumpPeak;
+        if (dd > lumpMaxDrawdown) lumpMaxDrawdown = dd;
+
+        const ret = assets - dcaInvestment;
+        const retRate = dcaInvestment > 0 ? ret / dcaInvestment : 0;
+        returnCurve[i].return += parseFloat(ret.toFixed(2));
+        returnCurve[i].returnRate = parseFloat((retRate * 100).toFixed(2));
+      }
+
+      // DCA max drawdown
+      let dcaPeak = 0;
+      let dcaMaxDrawdown = 0;
+      for (const pt of assetCurve) {
+        if (pt.dca > dcaPeak) dcaPeak = pt.dca;
+        const dd = (dcaPeak - pt.dca) / dcaPeak;
+        if (dd > dcaMaxDrawdown) dcaMaxDrawdown = dd;
+      }
+
+      const dcaEndingAssets = assetCurve.at(-1)?.dca || 0;
+      const lumpEndingAssets = assetCurve.at(-1)?.lumpSum || 0;
+      const dcaTotalReturn = dcaEndingAssets - dcaInvestment;
+      const dcaReturnRate = dcaInvestment > 0 ? dcaTotalReturn / dcaInvestment : 0;
+      const lumpTotalReturn = lumpEndingAssets - dcaInvestment;
+      const lumpReturnRate = dcaInvestment > 0 ? lumpTotalReturn / dcaInvestment : 0;
+
+      return {
+        fundCode,
+        cumulativeInvestment: parseFloat(dcaInvestment.toFixed(2)),
+        dcaEndingAssets: parseFloat(dcaEndingAssets.toFixed(2)),
+        dcaTotalReturn: parseFloat(dcaTotalReturn.toFixed(2)),
+        dcaReturnRate: parseFloat((dcaReturnRate * 100).toFixed(2)),
+        dcaMaxDrawdown: parseFloat((dcaMaxDrawdown * 100).toFixed(2)),
+        lumpSumEndingAssets: parseFloat(lumpEndingAssets.toFixed(2)),
+        lumpSumReturnRate: parseFloat((lumpReturnRate * 100).toFixed(2)),
+        lumpSumMaxDrawdown: parseFloat((lumpMaxDrawdown * 100).toFixed(2)),
+        assetCurve,
+        navCurve,
+        returnCurve,
+      };
+    }
+
+    // ── Format helpers ───────────────────────────────────────────────────────
+    function fmtMoney(v) {
+      if (v == null || isNaN(v)) return '—';
+      return '¥' + Math.round(v).toLocaleString('zh-CN');
+    }
+
+    function fmtPct(v) {
+      if (v == null || isNaN(v)) return '—';
+      return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+    }
+
+    function fmtDateInput(daysAgo) {
+      const d = new Date();
+      d.setDate(d.getDate() - daysAgo);
+      return d.toISOString().slice(0, 10);
+    }
+
+    // ── Init ────────────────────────────────────────────────────────────────
+    function init() {
+      populateFundDropdown();
+      setDefaultDates();
+      bindEvents();
+      lucide.createIcons();
+    }
+
+    function populateFundDropdown() {
+      const dd = document.getElementById('fundDropdown');
+      dd.innerHTML = FUNDS.map(f => `
+        <div class="fund-option" data-code="${f.code}" role="option">
+          <span class="fund-name">${f.name}</span>
+          <span style="display:flex;align-items:center;gap:8px">
+            <span class="fund-code-badge">${f.code}</span>
+            <svg class="check-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+        </div>
+      `).join('');
+    }
+
+    function setDefaultDates() {
+      document.getElementById('startDate').value = fmtDateInput(365 * 3);
+      document.getElementById('endDate').value = fmtDateInput(0);
+      state.startDate = fmtDateInput(365 * 3);
+      state.endDate = fmtDateInput(0);
+    }
+
+    function bindEvents() {
+      // Fund selector
+      const trigger = document.getElementById('fundTrigger');
+      const dropdown = document.getElementById('fundDropdown');
+
+      trigger.addEventListener('click', () => {
+        const isOpen = dropdown.classList.toggle('open');
+        trigger.classList.toggle('open', isOpen);
+        trigger.setAttribute('aria-expanded', isOpen);
+      });
+
+      trigger.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          trigger.click();
+        }
+        if (e.key === 'Escape') {
+          dropdown.classList.remove('open');
+          trigger.classList.remove('open');
+          trigger.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      dropdown.addEventListener('click', e => {
+        const opt = e.target.closest('.fund-option');
+        if (!opt) return;
+        selectFund(opt.dataset.code);
+        dropdown.classList.remove('open');
+        trigger.classList.remove('open');
+        trigger.setAttribute('aria-expanded', 'false');
+      });
+
+      document.addEventListener('click', e => {
+        if (!trigger.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.classList.remove('open');
+          trigger.classList.remove('open');
+          trigger.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      // Amount
+      document.getElementById('amountInput').addEventListener('input', e => {
+        state.amount = parseFloat(e.target.value) || null;
+        clearError('amountError');
+      });
+
+      // Frequency
+      document.getElementById('freqGroup').addEventListener('change', e => {
+        state.frequency = e.target.value;
+      });
+
+      // Dates
+      document.getElementById('startDate').addEventListener('change', e => {
+        state.startDate = e.target.value;
+        clearError('startDateError');
+      });
+
+      document.getElementById('endDate').addEventListener('change', e => {
+        state.endDate = e.target.value;
+        clearError('endDateError');
+      });
+
+      // Submit
+      document.getElementById('submitBtn').addEventListener('click', handleSubmit);
+      document.getElementById('retryBtn').addEventListener('click', handleSubmit);
+
+      // Tabs
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.activeTab = btn.dataset.tab;
+          if (state.result) renderChart();
+        });
+      });
+    }
+
+    function selectFund(code) {
+      state.selectedFund = code;
+      const fund = FUNDS.find(f => f.code === code);
+      const trigger = document.getElementById('fundTrigger');
+      trigger.innerHTML = `
+        <span class="fund-code">${fund.code}</span>
+        <span style="flex:1">${fund.name}</span>
+        <svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      `;
+      document.querySelectorAll('.fund-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.code === code);
+      });
+    }
+
+    function clearError(id) {
+      document.getElementById(id).classList.remove('visible');
+    }
+
+    function showError(msg) {
+      const banner = document.getElementById('errorBanner');
+      document.getElementById('errorText').textContent = msg;
+      banner.style.display = 'flex';
+    }
+
+    function hideError() {
+      document.getElementById('errorBanner').style.display = 'none';
+    }
+
+    function setLoading(val) {
+      state.loading = val;
+      const btn = document.getElementById('submitBtn');
+      if (val) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> 计算中…';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> 发起回测`;
+      }
+    }
+
+    function showSkeleton() {
+      const ids = ['valInvestment','valDcaAssets','valDcaReturn','valDcaRate','valDcaDrawdown','valLumpSum'];
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        el.innerHTML = `<div class="skeleton skeleton-value"></div>`;
+      });
+      document.getElementById('valLumpAssets').textContent = '—';
+      document.getElementById('valLumpRate').textContent = '—';
+      document.getElementById('valLumpDrawdown').textContent = '—';
+    }
+
+    // ── Validation ──────────────────────────────────────────────────────────
+    function validate() {
+      let ok = true;
+      if (!state.selectedFund) { ok = false; }
+      if (!state.amount || state.amount < 100 || state.amount > 10000000) {
+        document.getElementById('amountError').classList.add('visible');
+        document.getElementById('amountInput').classList.add('error');
+        ok = false;
+      }
+      if (!state.startDate) {
+        document.getElementById('startDateError').classList.add('visible');
+        ok = false;
+      }
+      if (!state.endDate) {
+        document.getElementById('endDateError').classList.add('visible');
+        ok = false;
+      }
+      if (state.startDate && state.endDate && state.startDate >= state.endDate) {
+        document.getElementById('startDateError').textContent = '开始日期须早于结束日期';
+        document.getElementById('startDateError').classList.add('visible');
+        ok = false;
+      }
+      return ok;
+    }
+
+    // ── Submit ──────────────────────────────────────────────────────────────
+    async function handleSubmit() {
+      hideError();
+      if (!validate()) return;
+      setLoading(true);
+      showSkeleton();
+
+      try {
+        const result = await mockBacktest({
+          fundCode: state.selectedFund,
+          amount: state.amount,
+          frequency: state.frequency,
+          startDate: state.startDate,
+          endDate: state.endDate,
+        });
+        state.result = result;
+        updateMetrics(result);
+        renderChart();
+      } catch (err) {
+        console.error(err);
+        showError('计算失败，请稍后重试');
+        clearMetrics();
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function clearMetrics() {
+      const ids = ['valInvestment','valDcaAssets','valDcaReturn','valDcaRate','valDcaDrawdown','valLumpSum'];
+      ids.forEach(id => { document.getElementById(id).textContent = '—'; });
+      document.getElementById('valLumpAssets').textContent = '—';
+      document.getElementById('valLumpRate').textContent = '—';
+      document.getElementById('valLumpDrawdown').textContent = '—';
+    }
+
+    function updateMetrics(r) {
+      document.getElementById('valInvestment').textContent = fmtMoney(r.cumulativeInvestment);
+
+      const dcaAssetsEl = document.getElementById('valDcaAssets');
+      dcaAssetsEl.textContent = fmtMoney(r.dcaEndingAssets);
+      dcaAssetsEl.className = 'metric-value mono ' + (r.dcaEndingAssets >= r.cumulativeInvestment ? 'accent-gold' : 'negative');
+
+      const dcaReturnEl = document.getElementById('valDcaReturn');
+      dcaReturnEl.textContent = fmtMoney(r.dcaTotalReturn);
+      dcaReturnEl.className = 'metric-value mono ' + (r.dcaTotalReturn >= 0 ? 'positive' : 'negative');
+
+      const dcaRateEl = document.getElementById('valDcaRate');
+      dcaRateEl.textContent = fmtPct(r.dcaReturnRate);
+      dcaRateEl.className = 'metric-value mono ' + (r.dcaReturnRate >= 0 ? 'positive' : 'negative');
+
+      document.getElementById('valDcaDrawdown').textContent = '-' + r.dcaMaxDrawdown.toFixed(2) + '%';
+
+      document.getElementById('valLumpSum').textContent = fmtMoney(r.lumpSumEndingAssets);
+      document.getElementById('valLumpAssets').textContent = fmtMoney(r.lumpSumEndingAssets);
+      document.getElementById('valLumpRate').textContent = fmtPct(r.lumpSumReturnRate);
+      document.getElementById('valLumpDrawdown').textContent = '-' + r.lumpSumMaxDrawdown.toFixed(2) + '%';
+    }
+
+    // ── Chart ────────────────────────────────────────────────────────────────
+    const CHART_COLORS = {
+      gold: '#f0b429',
+      teal: '#2dd4bf',
+      blue: '#58a6ff',
+      purple: '#a371f7',
+      text: '#8b949e',
+      grid: '#21262d',
+    };
+
+    function chartDefaults() {
+      return {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2.2,
+        animation: { duration: 800, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#21262d',
+            borderColor: '#30363d',
+            borderWidth: 1,
+            titleColor: '#e6edf3',
+            bodyColor: '#8b949e',
+            padding: 12,
+            cornerRadius: 8,
+            titleFont: { family: 'IBM Plex Mono', size: 12 },
+            bodyFont: { family: 'IBM Plex Sans', size: 12 },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: '#21262d', drawBorder: false },
+            ticks: { color: '#6e7681', font: { family: 'IBM Plex Sans', size: 11 }, maxTicksLimit: 8 },
+            border: { display: false },
+          },
+          y: {
+            grid: { color: '#21262d', drawBorder: false },
+            ticks: { color: '#6e7681', font: { family: 'IBM Plex Mono', size: 11 }, callback: v => v.toLocaleString('zh-CN') },
+            border: { display: false },
+          },
+        },
+      };
+    }
+
+    function renderChart() {
+      const r = state.result;
+      if (!r) return;
+
+      const empty = document.getElementById('emptyState');
+      empty.style.display = 'none';
+
+      const labels = r.assetCurve.map(pt => pt.date);
+      let datasets, yLabel;
+
+      if (state.activeTab === 'asset') {
+        datasets = [
+          {
+            label: '定投资产',
+            data: r.assetCurve.map(pt => pt.dca),
+            borderColor: CHART_COLORS.gold,
+            backgroundColor: 'rgba(240,180,41,0.08)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+          },
+          {
+            label: '一次性买入资产',
+            data: r.assetCurve.map(pt => pt.lumpSum),
+            borderColor: CHART_COLORS.teal,
+            backgroundColor: 'rgba(45,212,191,0.06)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+          },
+        ];
+        yLabel = '资产金额';
+      } else if (state.activeTab === 'nav') {
+        datasets = [
+          {
+            label: '基金净值',
+            data: r.navCurve.map(pt => pt.nav),
+            borderColor: CHART_COLORS.blue,
+            backgroundColor: 'rgba(88,166,255,0.08)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+          },
+        ];
+        yLabel = '净值';
+      } else {
+        datasets = [
+          {
+            label: '收益金额',
+            data: r.returnCurve.map(pt => pt.return),
+            borderColor: CHART_COLORS.gold,
+            backgroundColor: 'rgba(240,180,41,0.08)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+          },
+          {
+            label: '收益率 (%)',
+            data: r.returnCurve.map(pt => pt.returnRate),
+            borderColor: CHART_COLORS.purple,
+            backgroundColor: 'rgba(163,113,247,0.06)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            yAxisID: 'y1',
+          },
+        ];
+        yLabel = '收益金额';
+      }
+
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      const ctx = document.getElementById('mainChart').getContext('2d');
+      const opts = chartDefaults();
+
+      if (state.activeTab === 'return') {
+        opts.scales.y1 = {
+          position: 'right',
+          grid: { color: '#21262d', drawBorder: false },
+          ticks: { color: '#6e7681', font: { family: 'IBM Plex Mono', size: 11 }, callback: v => v + '%' },
+          border: { display: false },
+        };
+      }
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          ...opts,
+          plugins: {
+            ...opts.plugins,
+            tooltip: {
+              ...opts.plugins.tooltip,
+              callbacks: {
+                label: ctx => {
+                  const v = ctx.parsed.y;
+                  if (ctx.dataset.yAxisID === 'y1') return ctx.dataset.label + ': ' + v.toFixed(2) + '%';
+                  return ctx.dataset.label + ': ¥' + Math.round(v).toLocaleString('zh-CN');
+                },
+              },
+            },
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                color: '#8b949e',
+                font: { family: 'IBM Plex Sans', size: 12 },
+                usePointStyle: true,
+                pointStyle: 'line',
+                padding: 16,
+              },
+            },
+          },
+        },
+      });
+    }
+
+    // ── Boot ────────────────────────────────────────────────────────────────
+    init();
+  </script>
+</body>
+</html>
