@@ -147,8 +147,8 @@
     }
 
     @media (max-width: 640px) {
-      .sidebar { width: 100%; overflow-x: auto; overflow-y: auto; }
-      .sidebar .form-card { max-width: 100%; box-sizing: border-box; }
+      .sidebar { width: 100%; overflow-x: hidden; overflow-y: auto; }
+      .sidebar .form-card { width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
       .sidebar .form-group,
       .sidebar .radio-group,
       .sidebar .input-wrapper,
@@ -158,7 +158,9 @@
       .sidebar .fee-toggle,
       .sidebar .date-row { min-width: 0; }
       .sidebar .radio-pill { min-width: 0; }
-      .sidebar .date-row > * { min-width: 0; max-width: 100%; }
+      .sidebar .date-row { width: 100%; overflow: hidden; }
+      .sidebar .date-row > * { min-width: 0; max-width: 100%; overflow: hidden; }
+      .sidebar .form-input { width: 100%; box-sizing: border-box; }
     }
 
     .form-card {
