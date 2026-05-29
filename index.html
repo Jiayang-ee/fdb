@@ -146,6 +146,23 @@
       .sidebar { position: static; }
     }
 
+    @media (max-width: 640px) {
+      .sidebar { width: 100%; overflow-x: hidden; overflow-y: auto; }
+      .sidebar .form-card { width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; }
+      .sidebar .form-group,
+      .sidebar .radio-group,
+      .sidebar .input-wrapper,
+      .sidebar .fund-select-wrapper,
+      .sidebar .rule-item,
+      .sidebar .rule-list,
+      .sidebar .fee-toggle,
+      .sidebar .date-row { min-width: 0; }
+      .sidebar .radio-pill { min-width: 0; }
+      .sidebar .date-row { width: 100%; overflow: hidden; }
+      .sidebar .date-row > * { min-width: 0; max-width: 100%; overflow: hidden; }
+      .sidebar .form-input { width: 100%; box-sizing: border-box; }
+    }
+
     .form-card {
       background: var(--bg-surface);
       border: 1px solid var(--border);
@@ -412,6 +429,80 @@
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Rule Card (DCA Info) ──────────────────────── */
+    .rule-card {
+      margin-top: 14px;
+      padding: 16px 16px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .rule-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .rule-card-header svg { flex-shrink: 0; color: var(--accent-gold); }
+    .rule-card-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.1px;
+    }
+    .rule-list { list-style: none; }
+    .rule-item {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 8px 0;
+      border-top: 1px solid var(--border);
+    }
+    .rule-item:first-child { border-top: none; padding-top: 0; }
+    .rule-term {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-gold);
+      letter-spacing: 0.5px;
+      padding-top: 1px;
+      flex-shrink: 0;
+    }
+    .rule-desc {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+    .fee-toggle {
+      display: flex;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 4px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      width: fit-content;
+    }
+    .fee-toggle-btn {
+      padding: 5px 14px;
+      background: transparent;
+      border: none;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .fee-toggle-btn.active {
+      background: var(--accent-gold);
+      color: var(--bg-base);
+    }
+    .fee-toggle-btn:hover:not(.active) { color: var(--text-primary); }
+
 
     /* ── Content Area ─────────────────────────────── */
     .content-area {
@@ -717,6 +808,36 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             发起回测
           </button>
+
+          <!-- DCA Rule Info Card -->
+          <div class="rule-card">
+            <div class="rule-card-header">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <h3>定投规则说明</h3>
+            </div>
+            <ul class="rule-list">
+              <li class="rule-item">
+                <span class="rule-term">定投日</span>
+                <span class="rule-desc" id="ruleFreqDesc">选择"每月"时，系统每月执行一次定投。</span>
+              </li>
+              <li class="rule-item">
+                <span class="rule-term">买入价格</span>
+                <span class="rule-desc">每次买入按当天基金净值计算，相当于用当日价格买入对应份额。</span>
+              </li>
+              <li class="rule-item">
+                <span class="rule-term">手续费</span>
+                <span class="rule-desc" id="ruleFeeDesc">默认不计手续费，所有定投金额直接用于买入基金份额。</span>
+              </li>
+              <li class="rule-item">
+                <span class="rule-term">结果说明</span>
+                <span class="rule-desc">定投收益率 = 总收益 / 累计投入；一次性买入对比从同一起始日一次性投入同等金额。</span>
+              </li>
+            </ul>
+            <div class="fee-toggle" role="group" aria-label="手续费说明模式">
+              <button type="button" class="fee-toggle-btn active" data-fee-mode="free">默认不计</button>
+              <button type="button" class="fee-toggle-btn" data-fee-mode="rule">按规则扣除</button>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -816,6 +937,17 @@
       error: null,
       result: null,
       activeTab: 'asset',
+      feeMode: 'free',
+    };
+
+    const ruleFreqText = {
+      weekly: '选择"每周"时，系统每周执行一次定投。',
+      biweekly: '选择"每两周"时，系统隔周执行一次，更适合想降低买入频率的用户。',
+      monthly: '选择"每月"时，系统每月执行一次定投。',
+    };
+    const ruleFeeText = {
+      free: '默认不计手续费，所有定投金额直接用于买入基金份额，便于先看策略本身的表现。',
+      rule: '按规则扣除手续费：每次投入会先扣除申购费，剩余金额再按当日净值买入。',
     };
 
     let chartInstance = null;
@@ -1034,7 +1166,21 @@
       // Frequency
       document.getElementById('freqGroup').addEventListener('change', e => {
         state.frequency = e.target.value;
+        const ruleFreqDesc = document.getElementById('ruleFreqDesc');
+        if (ruleFreqDesc) ruleFreqDesc.textContent = ruleFreqText[state.frequency] || '';
       });
+
+      // Fee toggle
+      document.querySelectorAll('.fee-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.fee-toggle-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.feeMode = btn.dataset.feeMode;
+          const ruleFeeDesc = document.getElementById('ruleFeeDesc');
+          if (ruleFeeDesc) ruleFeeDesc.textContent = ruleFeeText[state.feeMode] || '';
+        });
+      });
+
 
       // Dates
       document.getElementById('startDate').addEventListener('change', e => {
