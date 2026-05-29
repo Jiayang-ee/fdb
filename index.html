@@ -147,8 +147,15 @@
     }
 
     @media (max-width: 640px) {
-      .sidebar { width: 100%; overflow-x: auto; }
+      .sidebar { width: 100%; overflow-x: hidden; overflow-y: auto; }
       .sidebar .form-card { max-width: 100%; box-sizing: border-box; }
+      .sidebar .form-group,
+      .sidebar .radio-group,
+      .sidebar .input-wrapper,
+      .sidebar .fund-select-wrapper,
+      .sidebar .rule-item,
+      .sidebar .rule-list,
+      .sidebar .fee-toggle { min-width: 0; }
     }
 
     .form-card {
